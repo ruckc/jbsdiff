@@ -37,6 +37,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 
 /**
  * This class provides functionality for using an old file and a patch to
@@ -149,12 +150,8 @@ public class Patch {
             dataIn = compressor.createCompressorInputStream(dataIn);
             extraIn = compressor.createCompressorInputStream(extraIn);
 
-            FileInputStream oldStream = new FileInputStream(oldFile);
-            byte[] old = new byte[(int) oldFile.length()];
-            oldStream.read(old);
-            oldStream.close();
-
-            OutputStream out = new BufferedOutputStream(new FileOutputStream(newFile));
+            RandomAccessFile inputFile = new RandomAccessFile(oldFile, "r");
+            OutputStream outputFile = new BufferedOutputStream(new FileOutputStream(newFile));
 
             /* Start patching */
             int newPointer = 0, oldPointer = 0;
@@ -165,15 +162,15 @@ public class Patch {
 
                 /* Read diff string */
                 int diffLength = control.getDiffLength();
+                byte[] input = new byte[diffLength];
+                inputFile.read(input, 0, diffLength);
                 int extraLength = control.getExtraLength();
                 byte[] output = new byte[diffLength + extraLength];
                 read(dataIn, output, 0, diffLength);
 
                 /* Add old data to diff string */
                 for (int i = 0; i < diffLength; ++i) {
-                    if ((oldPointer + i >= 0) && oldPointer + i < old.length) {
-                        output[i] += old[oldPointer + i];
-                    }
+                    output[i] += input[i];
                 }
 
                 newPointer += diffLength;
@@ -181,13 +178,15 @@ public class Patch {
 
                 /* Copy the extra string to the output */
                 read(extraIn, output, diffLength, extraLength);
-                out.write(output);
+                outputFile.write(output);
 
                 newPointer += extraLength;
                 oldPointer += control.getSeekLength();
+                inputFile.seek(oldPointer);
             }
 
-            out.close();
+            inputFile.close();
+            outputFile.close();
 
         } finally {
             controlIn.close();
